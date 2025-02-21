@@ -18,6 +18,7 @@ import {
   Copy,
   Pencil,
   Share2,
+  Save,
 } from "lucide-react";
 import { format } from "date-fns";
 import { useRouter } from "next/navigation";
@@ -28,6 +29,8 @@ import { Checkbox } from "@radix-ui/react-checkbox";
 import React from "react";
 import { NavigationDock } from "@/components/navigationDock";
 import { SlackDialog } from "@/components/slackDialog";
+import supabase from '@/lib/supabase';
+import { toast } from "@/hooks/use-toast";
 
 interface MediaFile {
   id: string;
@@ -55,7 +58,10 @@ export default function NotePage() {
   const [duration, setDuration] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
-  const [isSlackOpen, setIsSlackOpen] = useState(false)
+  const [isSlackOpen, setIsSlackOpen] = useState(false);
+  const [currentMeetingId, setCurrentMeetingId] = useState<string>("");
+  const [userId, setUserId] = useState<string | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
   const chunks = useRef<BlobPart[]>([]);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
@@ -63,7 +69,7 @@ export default function NotePage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [recordings, setRecordings] = useState<MediaFile[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<MediaFile[]>([]);
-  const [messages] = React.useState<Message[]>([
+  const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
       speaker: "Charlie",
@@ -78,7 +84,22 @@ export default function NotePage() {
       time: "0:08",
       text: "Yeah, I started using Otter a few months ago. And it saved me a lot of time from...",
     },
-  ])
+  ]);
+
+  // Get current user when component mounts
+  useEffect(() => {
+    const getUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setUserId(user.id);
+      }
+    };
+    
+    getUser();
+    
+    // Generate a unique meeting ID for this session
+    setCurrentMeetingId(`meeting_${Date.now()}`);
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -152,6 +173,9 @@ export default function NotePage() {
       mediaRecorder.current.stream.getTracks().forEach((track) => track.stop());
       setIsRecording(false);
       setIsMediaLibraryOpen(true);
+      
+      // Auto-save transcript when recording stops
+      saveTranscript(currentMeetingId);
     }
   };
 
@@ -188,18 +212,71 @@ export default function NotePage() {
     "Copy the summary",
     "Try tagging a speaker",
     "Choose which meetings you want Otter to join and take notes",
-  ]
+  ];
 
-  const transcriptText = messages
-    .map((message) => `${message.speaker} (${message.time}): ${message.text}`)
-    .join("\n");
+  // Function to save transcript to database
+  const saveTranscript = async (meetingId: string) => {
+    if (!userId) {
+      toast({
+        title: "Authentication required",
+        description: "Please sign in to save transcripts",
+        variant: "destructive",
+      });
+      return;
+    }
+    
+    try {
+      setIsSaving(true);
+      
+      // Format transcript from messages
+      const transcriptText = messages
+        .map((message) => `${message.speaker} (${message.time}): ${message.text}`)
+        .join("\n");
+      
+      const response = await fetch("/api/meetings/transcript", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          meeting_id: meetingId,
+          transcript: transcriptText,
+          user_id: userId,
+        }),
+      });
 
-  // Create a summary string (for example, using your overview and action items)
-  const summaryText =
-    "Charlie and Lisa discuss Otter AI, a meeting note-taking tool that transcribes and summarizes meetings in real-time. " +
-    "Lisa explains how Otter works by joining meetings on her calendar and providing live notes, automatic screenshots, and action items. " +
-    "Charlie is interested in using Otter for his own meetings and asks questions about how to set it up and share notes with his team.\n\n" +
-    "Action Items: " + actionItems.join(", ");
+      if (!response.ok) {
+        throw new Error("Failed to save transcript");
+      }
+
+      const result = await response.json();
+      console.log("Transcript saved successfully:", result);
+      
+      toast({
+        title: "Transcript saved",
+        description: "Your meeting transcript has been saved successfully",
+      });
+      
+      return result;
+    } catch (error) {
+      console.error("Error saving transcript:", error);
+      
+      toast({
+        title: "Error saving transcript",
+        description: "Please try again later",
+        variant: "destructive",
+      });
+      
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handler for manual save button
+  const handleSaveTranscript = async () => {
+    await saveTranscript(currentMeetingId);
+  };
 
   const handleSlackClick = async () => {
     try {
@@ -225,11 +302,22 @@ export default function NotePage() {
       console.error("Error:", error);
       console.log("Failed to get Slack channels. Please try again.");
     }
-    setIsSlackOpen(!isSlackOpen)
-  }
+    setIsSlackOpen(!isSlackOpen);
+  };
 
   const postToSlack = async (selectedChannels: any) => {
     try {
+      const transcriptText = messages
+        .map((message) => `${message.speaker} (${message.time}): ${message.text}`)
+        .join("\n");
+      
+      // Create a summary string (for example, using your overview and action items)
+      const summaryText =
+        "Charlie and Lisa discuss Otter AI, a meeting note-taking tool that transcribes and summarizes meetings in real-time. " +
+        "Lisa explains how Otter works by joining meetings on her calendar and providing live notes, automatic screenshots, and action items. " +
+        "Charlie is interested in using Otter for his own meetings and asks questions about how to set it up and share notes with his team.\n\n" +
+        "Action Items: " + actionItems.join(", ");
+        
       const payload = {
         transcript: transcriptText,
         summary: summaryText,
@@ -249,9 +337,17 @@ export default function NotePage() {
       }
 
       console.log("Message posted to Slack successfully!");
+      toast({
+        title: "Posted to Slack",
+        description: "Your meeting details have been shared to Slack",
+      });
     } catch (error) {
       console.error("Error:", error);
-      console.log("Failed to post to Slack. Please try again.");
+      toast({
+        title: "Failed to post to Slack",
+        description: "Please try again later",
+        variant: "destructive",
+      });
     }
   };
 
@@ -265,6 +361,16 @@ export default function NotePage() {
             <h1 className="text-xl font-semibold">Note</h1>
           </div>
           <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              className="gap-2 text-black"
+              onClick={handleSaveTranscript}
+              disabled={isSaving}
+            >
+              <Save className="h-4 w-4" />
+              {isSaving ? "Saving..." : "Save Transcript"}
+            </Button>
             <Button
               variant="ghost"
               size="sm"
