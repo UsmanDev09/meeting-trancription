@@ -4,12 +4,15 @@ import { Inter } from "next/font/google";
 import { ThemeProvider } from "@/components/theme-provider";
 import Provider from "@/components/Provider";
 import { SessionProvider } from "next-auth/react";
+import { Rubik } from 'next/font/google';
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "Dashboard",
   description: "Modern dashboard interface",
 };
+
+const rubik = Rubik({ subsets: ['latin'], display: 'swap' });
 
 export default function RootLayout({
   children,
@@ -18,7 +21,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={inter.className}>
+      <body className={rubik.className}>
         <ThemeProvider attribute="class" defaultTheme="light">
           <Provider>{children}</Provider>
         </ThemeProvider>
