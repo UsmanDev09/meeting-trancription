@@ -117,7 +117,7 @@ export default function SignInPage() {
         >
           {({ isSubmitting }) => (
             <Form className="space-y-4">
-              <div className="relative" style={{ marginBottom: '5%' }}>
+              <div className="relative" style={{ marginBottom: "5%" }}>
                 <EnvelopeIcon className="w-6 h-6 text-primary-700 absolute left-3 top-1/2 transform -translate-y-1/2 pointer-events-none" />
                 <Field
                   type="email"
@@ -131,10 +131,10 @@ export default function SignInPage() {
                   className="text-red-500 text-custom-small mt-1 absolute left-0 -bottom-6"
                 />
               </div>
-              <div className="relative" style={{ marginBottom: '2%' }}>
+              <div className="relative" style={{ marginBottom: "2%" }}>
                 <LockClosedIcon className="w-6 h-6 text-primary-700 absolute left-3 top-1/2 transform -translate-y-1/2" />
                 <Field
-                  type={showPassword ? 'text' : 'password'}
+                  type={showPassword ? "text" : "password"}
                   name="password"
                   placeholder="Password"
                   className="w-full pl-12 pr-12 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-primary-700 hover:border hover:border-primary-700"
@@ -159,9 +159,11 @@ export default function SignInPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className={`w-full bg-primary-700 text-white py-3 rounded-md font-semibold hover:bg-primary-800 transition ${isSubmitting ? 'opacity-50 cursor-not-allowed' : ''}`}
+                className={`w-full bg-primary text-white py-3 rounded-md font-semibold hover:bg-primary-800 transition ${
+                  isSubmitting ? "opacity-50 cursor-not-allowed" : ""
+                }`}
               >
-                {isSubmitting ? 'Logging in...' : 'Login'}
+                {isSubmitting ? "Logging in..." : "Login"}
               </button>
             </Form>
           )}
@@ -187,7 +189,7 @@ export default function SignInPage() {
         </div>
       </div>
       <p className="text-center text-sm text-gray-500 mt-6">
-        Don&apos;t have an account?{' '}
+        Don&apos;t have an account?{" "}
         <Link
           href="/sign-up"
           className="text-primary-700 font-semibold hover:underline"

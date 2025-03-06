@@ -13,7 +13,7 @@ import { cn } from "@/lib/utils"
 import { ImportDialog } from "./importDialog"
 import { MediaLibraryDialog } from "./mediaLibraryDialog"
 import { VideoPreview } from "./videoPreview"
-import { useRouter } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 
 export type IconProps = React.HTMLAttributes<SVGElement>
 
@@ -39,6 +39,7 @@ export function NavigationDock() {
     const [isImportOpen, setIsImportOpen] = useState(false)
     const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false)
     const [isVideoRecording, setIsVideoRecording] = useState(false)
+    const [isAudioRecording, setIsAudioRecording] = useState(false);
     const [chatMessages, setChatMessages] = useState<{ role: "user" | "assistant"; content: string }[]>([])
     const [inputMessage, setInputMessage] = useState("")
     const [dragActive, setDragActive] = useState(false)
@@ -96,6 +97,10 @@ export function NavigationDock() {
             console.error("Error accessing video devices:", err)
         }
     }
+      
+    const handleAudioRecord = async () => {
+          router.push("/note?record=audio");
+      };
 
     const stopRecording = () => {
         if (mediaRecorder && mediaRecorder.state !== "inactive") {
@@ -193,184 +198,196 @@ export function NavigationDock() {
     }
 
     return (
-        <div className="relative bottom-4 left-4 right-4 z-50">
-            <TooltipProvider>
-                <Dock direction="middle" className="bg-white">
-                    <DockIcon>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    onClick={handleChatToggle}
-                                    aria-label="Chat"
-                                    className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-12 rounded-full")}
-                                >
-                                    <Icons.bot className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Chat</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </DockIcon>
-                    <DockIcon>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    onClick={handleImportToggle}
-                                    aria-label="Import"
-                                    className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-12 rounded-full")}
-                                >
-                                    <Icons.download className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Import</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </DockIcon>
-                    <Separator orientation="vertical" className="h-full" />
-                    <DockIcon>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    onClick={() => isVideoRecording ? stopRecording() : startRecording()}
-                                    aria-label="Video Record"
-                                    className={cn(
-                                        buttonVariants({ variant: "ghost", size: "icon" }),
-                                        "size-12 rounded-full",
-                                        isVideoRecording && "text-red-500",
-                                    )}
-                                >
-                                    <Icons.video className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Video Record</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </DockIcon>
-                    <DockIcon>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    onClick={() => router.push('/note')}
-                                    aria-label="Audio Record"
-                                    className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-12 rounded-full")}
-                                >
-                                    <Icons.mic className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Audio Record</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </DockIcon>
-                    <Separator orientation="vertical" className="h-full" />
-                    <DockIcon>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button
-                                    onClick={handlePasteLink}
-                                    aria-label="Paste Link"
-                                    className={cn(buttonVariants({ variant: "ghost", size: "icon" }), "size-12 rounded-full")}
-                                >
-                                    <Icons.link className="size-4" />
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Paste Link</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </DockIcon>
-                </Dock>
-            </TooltipProvider>
+      <div className="relative bottom-4 left-4 right-4 z-50">
+        <TooltipProvider>
+          <Dock direction="middle" className="bg-white">
+            <DockIcon>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handleChatToggle}
+                    aria-label="Chat"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "size-12 rounded-full"
+                    )}
+                  >
+                    <Icons.bot className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Chat</p>
+                </TooltipContent>
+              </Tooltip>
+            </DockIcon>
+            <DockIcon>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handleImportToggle}
+                    aria-label="Import"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "size-12 rounded-full"
+                    )}
+                  >
+                    <Icons.download className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Import</p>
+                </TooltipContent>
+              </Tooltip>
+            </DockIcon>
+            <Separator orientation="vertical" className="h-full" />
+            <DockIcon>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={() =>
+                      isVideoRecording ? stopRecording() : startRecording()
+                    }
+                    aria-label="Video Record"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "size-12 rounded-full",
+                      isVideoRecording && "text-red-500"
+                    )}
+                  >
+                    <Icons.video className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Video Record</p>
+                </TooltipContent>
+              </Tooltip>
+            </DockIcon>
+            <DockIcon>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handleAudioRecord}
+                    aria-label="Audio Record"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "size-12 rounded-full",
+                      isAudioRecording && "text-red-500"
+                    )}
+                  >
+                    <Icons.mic className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Audio Record</p>
+                </TooltipContent>
+              </Tooltip>
+            </DockIcon>
+            <Separator orientation="vertical" className="h-full" />
+            <DockIcon>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    onClick={handlePasteLink}
+                    aria-label="Paste Link"
+                    className={cn(
+                      buttonVariants({ variant: "ghost", size: "icon" }),
+                      "size-12 rounded-full"
+                    )}
+                  >
+                    <Icons.link className="size-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Paste Link</p>
+                </TooltipContent>
+              </Tooltip>
+            </DockIcon>
+          </Dock>
+        </TooltipProvider>
 
-            {isChatOpen && (
-                <Card className="fixed bottom-20 left-4 right-4 h-96 overflow-hidden max-w-md mx-auto">
-                    <CardContent className="h-full p-0">
-                        <div className="absolute right-2 top-2">
-                            <Button
-                                variant="ghost"
-                                size="icon"
-                                onClick={() => setIsChatOpen(false)}
-                                className="h-8 w-8 hover:bg-muted"
-                            >
-                                <X className="h-4 w-4" />
-                                <span className="sr-only">Close chat</span>
-                            </Button>
-                        </div>
-                        <div className="flex h-full flex-col">
-                            <div className="flex-1 overflow-auto p-4 space-y-4">
-                                {chatMessages.map((message, i) => (
-                                    <div
-                                        key={i}
-                                        className={cn(
-                                            "flex w-max max-w-[75%] flex-col gap-2 rounded-lg px-3 py-2 text-sm",
-                                            message.role === "user"
-                                                ? "ml-auto bg-primary text-primary-foreground"
-                                                : "bg-muted"
-                                        )}
-                                    >
-                                        {message.content}
-                                    </div>
-                                ))}
-                            </div>
-                            <form onSubmit={handleChatSubmit} className="border-t p-4">
-                                <div className="flex gap-2">
-                                    <Input
-                                        placeholder="Ask anything about your conversations..."
-                                        value={inputMessage}
-                                        onChange={(e) => setInputMessage(e.target.value)}
-                                        className="flex-1"
-                                    />
-                                    <Button type="submit" size="icon">
-                                        <CircleArrowUp className="h-7 w-7" />
-                                        <span className="sr-only">Send message</span>
-                                    </Button>
-                                </div>
-                            </form>
-                        </div>
-                    </CardContent>
-                </Card>
-            )}
-
-            {isVideoRecording && (
-                <VideoPreview
-                    videoRef={videoRef}
-                    onStop={() => stopRecording()}
-                />
-            )}
-
-            <ImportDialog
-                isOpen={isImportOpen}
-                onOpenChange={setIsImportOpen}
-                dragActive={dragActive}
-                onDrag={handleDrag}
-                onDrop={handleDrop}
-                uploadedFiles={uploadedFiles}
-                onFileSelect={handleFiles}
-                onDelete={deleteFile}
-            />
-
-            <MediaLibraryDialog
-                isOpen={isMediaLibraryOpen}
-                onOpenChange={setIsMediaLibraryOpen}
-                mediaType={mediaType}
-                onMediaTypeChange={(value: "audio" | "video") => setMediaType(value)}
-                recordings={recordings}
-                uploadedFiles={uploadedFiles}
-                onDelete={deleteFile}
-            />
-             {(errorMessage) && (
-                <div className="fixed bottom-4 right-8 bg-red-500 text-white p-4 rounded-lg shadow-lg">
-                    {errorMessage}
+        {isChatOpen && (
+          <Card className="fixed bottom-20 left-4 right-4 h-96 overflow-hidden max-w-md mx-auto">
+            <CardContent className="h-full p-0">
+              <div className="absolute right-2 top-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => setIsChatOpen(false)}
+                  className="h-8 w-8 hover:bg-muted"
+                >
+                  <X className="h-4 w-4" />
+                  <span className="sr-only">Close chat</span>
+                </Button>
+              </div>
+              <div className="flex h-full flex-col">
+                <div className="flex-1 overflow-auto p-4 space-y-4">
+                  {chatMessages.map((message, i) => (
+                    <div
+                      key={i}
+                      className={cn(
+                        "flex w-max max-w-[75%] flex-col gap-2 rounded-lg px-3 py-2 text-sm",
+                        message.role === "user"
+                          ? "ml-auto bg-primary text-primary-foreground"
+                          : "bg-muted"
+                      )}
+                    >
+                      {message.content}
+                    </div>
+                  ))}
                 </div>
-            )}
-            {(successMessage) && (
-               <div className="fixed bottom-4 right-8 bg-purple-600 text-white p-4 rounded-lg shadow-lg">
-                   {successMessage}
-               </div>
-           )}
-        </div>
-    )
+                <form onSubmit={handleChatSubmit} className="border-t p-4">
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="Ask anything about your conversations..."
+                      value={inputMessage}
+                      onChange={(e) => setInputMessage(e.target.value)}
+                      className="flex-1"
+                    />
+                    <Button type="submit" size="icon">
+                      <CircleArrowUp className="h-7 w-7" />
+                      <span className="sr-only">Send message</span>
+                    </Button>
+                  </div>
+                </form>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {isVideoRecording && (
+          <VideoPreview videoRef={videoRef} onStop={() => stopRecording()} />
+        )}
+
+        <ImportDialog
+          isOpen={isImportOpen}
+          onOpenChange={setIsImportOpen}
+          dragActive={dragActive}
+          onDrag={handleDrag}
+          onDrop={handleDrop}
+          uploadedFiles={uploadedFiles}
+          onFileSelect={handleFiles}
+          onDelete={deleteFile}
+        />
+
+        <MediaLibraryDialog
+          isOpen={isMediaLibraryOpen}
+          onOpenChange={setIsMediaLibraryOpen}
+          mediaType={mediaType}
+          onMediaTypeChange={(value: "audio" | "video") => setMediaType(value)}
+          recordings={recordings}
+          uploadedFiles={uploadedFiles}
+          onDelete={deleteFile}
+        />
+        {errorMessage && (
+          <div className="fixed bottom-4 right-8 bg-red-500 text-white p-4 rounded-lg shadow-lg">
+            {errorMessage}
+          </div>
+        )}
+        {successMessage && (
+          <div className="fixed bottom-4 right-8 bg-purple-600 text-white p-4 rounded-lg shadow-lg">
+            {successMessage}
+          </div>
+        )}
+      </div>
+    );
 }

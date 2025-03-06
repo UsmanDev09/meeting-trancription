@@ -3,16 +3,14 @@
 import { useEffect, useState, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   Link2,
-  Mic,
   Pause,
   Square,
   Play,
   CalendarIcon,
   Clock,
-  IdCard,
   Lock,
   Camera,
   Copy,
@@ -21,7 +19,7 @@ import {
   Save,
 } from "lucide-react";
 import { format } from "date-fns";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Sidebar } from "@/components/sidebar";
 import { MediaLibraryDialog } from "@/components/mediaLibraryDialog";
 import Image from "next/image";
@@ -29,7 +27,7 @@ import { Checkbox } from "@radix-ui/react-checkbox";
 import React from "react";
 import { NavigationDock } from "@/components/navigationDock";
 import { SlackDialog } from "@/components/slackDialog";
-import supabase from '@/lib/supabase';
+import supabase from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
 
 interface MediaFile {
@@ -41,16 +39,16 @@ interface MediaFile {
 }
 
 interface Message {
-  id: string
-  speaker: string
-  initial: string
-  time: string
-  text: string
+  id: string;
+  speaker: string;
+  initial: string;
+  time: string;
+  text: string;
 }
 
 interface Channel {
-  id: string
-  name: string
+  id: string;
+  name: string;
 }
 
 export default function NotePage() {
@@ -58,11 +56,13 @@ export default function NotePage() {
   const [duration, setDuration] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const audioStream = useRef<MediaStream | null>(null);
   const [isSlackOpen, setIsSlackOpen] = useState(false);
   const [currentMeetingId, setCurrentMeetingId] = useState<string>("");
   const [userId, setUserId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const chunks = useRef<BlobPart[]>([]);
   const [isMediaLibraryOpen, setIsMediaLibraryOpen] = useState(false);
   const [mediaType, setMediaType] = useState<"audio" | "video">("audio");
@@ -86,25 +86,32 @@ export default function NotePage() {
     },
   ]);
 
-  // Get current user when component mounts
   useEffect(() => {
     const getUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
       if (user) {
         setUserId(user.id);
       }
     };
-    
     getUser();
-    
-    // Generate a unique meeting ID for this session
     setCurrentMeetingId(`meeting_${Date.now()}`);
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("record") === "audio" && !isRecording) {
+      startRecording();
+    }
+  }, [searchParams, isRecording]);
 
   useEffect(() => {
     return () => {
       if (mediaRecorder.current && mediaRecorder.current.state !== "inactive") {
         mediaRecorder.current.stop();
+      }
+      if (audioStream.current) {
+        audioStream.current.getTracks().forEach((track) => track.stop());
       }
     };
   }, []);
@@ -122,6 +129,7 @@ export default function NotePage() {
   const startRecording = async () => {
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioStream.current = stream; // Store the stream so we can stop it later.
       mediaRecorder.current = new MediaRecorder(stream);
 
       mediaRecorder.current.ondataavailable = (e) => {
@@ -136,13 +144,21 @@ export default function NotePage() {
         const newRecording: MediaFile = {
           id: Date.now().toString(),
           name: `Recording_${format(new Date(), "MMM_d_yyyy_h_mm_a")}`,
-          url: url,
+          url,
           date: new Date(),
           type: "audio",
         };
-
         setRecordings((prev) => [...prev, newRecording]);
         chunks.current = [];
+      };
+
+      // Add event listeners (for debugging)
+      mediaRecorder.current.onpause = () => {
+        console.log("Recording paused");
+      };
+
+      mediaRecorder.current.onresume = () => {
+        console.log("Recording resumed");
       };
 
       mediaRecorder.current.start();
@@ -153,6 +169,7 @@ export default function NotePage() {
     }
   };
 
+  // Pause recording
   const handlePause = () => {
     if (mediaRecorder.current && mediaRecorder.current.state === "recording") {
       mediaRecorder.current.pause();
@@ -160,6 +177,7 @@ export default function NotePage() {
     }
   };
 
+  // Resume recording
   const handleResume = () => {
     if (mediaRecorder.current && mediaRecorder.current.state === "paused") {
       mediaRecorder.current.resume();
@@ -170,13 +188,16 @@ export default function NotePage() {
   const handleStop = () => {
     if (mediaRecorder.current && mediaRecorder.current.state !== "inactive") {
       mediaRecorder.current.stop();
-      mediaRecorder.current.stream.getTracks().forEach((track) => track.stop());
-      setIsRecording(false);
-      setIsMediaLibraryOpen(true);
-      
-      // Auto-save transcript when recording stops
-      saveTranscript(currentMeetingId);
     }
+    if (audioStream.current) {
+      audioStream.current.getTracks().forEach((track) => track.stop());
+      audioStream.current = null;
+    }
+    setIsRecording(false);
+    setIsPaused(false);
+    router.replace("/note");
+    setIsMediaLibraryOpen(true);
+    saveTranscript(currentMeetingId);
   };
 
   const formatTime = (seconds: number) => {
@@ -206,97 +227,88 @@ export default function NotePage() {
     "Copy the summary",
     "Try tagging a speaker",
     "Choose which meetings you want Otter to join and take notes",
-    "Assign this action item to yourself",
-    "Check off this action item",
-    "Try Otter Chat",
-    "Copy the summary",
-    "Try tagging a speaker",
-    "Choose which meetings you want Otter to join and take notes",
   ];
 
-  // Function to save transcript to database
-  const saveTranscript = async (meetingId: string) => {
-    if (!userId) {
-      toast({
-        title: "Authentication required",
-        description: "Please sign in to save transcripts",
-        variant: "destructive",
-      });
-      return;
+  // Save transcript to the database
+const saveTranscript = async (meetingId: string) => {
+  if (!userId) {
+    toast({
+      title: "Authentication required",
+      description: "Please sign in to save transcripts",
+      variant: "destructive",
+    });
+    return;
+  }
+  try {
+    setIsSaving(true);
+    const transcriptText = messages
+      .map((message) => `${message.speaker} (${message.time}): ${message.text}`)
+      .join("\n");
+    const contextFiles =
+    recordings.length > 0 ? recordings.map((recording) => recording.url) : [];
+    const suggestions = actionItems;
+    const embeddings = null; 
+    const payload = {
+      user_id: userId,
+      meeting_id: meetingId,
+      transcript: transcriptText,
+      context_files: contextFiles,
+      embeddings: embeddings,
+      generated_prompt: suggestions.join(", "),
+      chunks: 'lkajdsflksajfd',
+      suggestion_count: suggestions.length,
+    };
+
+    const response = await fetch("/api/transcript", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to save transcript");
     }
-    
-    try {
-      setIsSaving(true);
-      
-      // Format transcript from messages
-      const transcriptText = messages
-        .map((message) => `${message.speaker} (${message.time}): ${message.text}`)
-        .join("\n");
-      
-      const response = await fetch("/api/meetings/transcript", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          meeting_id: meetingId,
-          transcript: transcriptText,
-          user_id: userId,
-        }),
-      });
 
-      if (!response.ok) {
-        throw new Error("Failed to save transcript");
-      }
+    const result = await response.json();
+    console.log("Transcript saved successfully:", result);
+    toast({
+      title: "Transcript saved",
+      description: "Your meeting transcript has been saved successfully",
+    });
+    return result;
+  } catch (error) {
+    console.error("Error saving transcript:", error);
+    toast({
+      title: "Error saving transcript",
+      description: "Please try again later",
+      variant: "destructive",
+    });
+    throw error;
+  } finally {
+    setIsSaving(false);
+  }
+};
 
-      const result = await response.json();
-      console.log("Transcript saved successfully:", result);
-      
-      toast({
-        title: "Transcript saved",
-        description: "Your meeting transcript has been saved successfully",
-      });
-      
-      return result;
-    } catch (error) {
-      console.error("Error saving transcript:", error);
-      
-      toast({
-        title: "Error saving transcript",
-        description: "Please try again later",
-        variant: "destructive",
-      });
-      
-      throw error;
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  // Handler for manual save button
+  // Manual transcript save handler
   const handleSaveTranscript = async () => {
     await saveTranscript(currentMeetingId);
   };
 
+  // Get Slack channels and toggle Slack dialog
   const handleSlackClick = async () => {
     try {
       const response = await fetch("/api/slack/channels", {
         method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-        }
+        headers: { "Content-Type": "application/json" },
       });
-
       if (!response.ok) {
         throw new Error("Failed to get Slack channels");
       }
-
       const data = await response.json();
       const channelList: Channel[] = data.channels.map((channel: any) => ({
         id: channel.id,
         name: channel.name,
       }));
-
       setChannels(channelList);
     } catch (error) {
       console.error("Error:", error);
@@ -305,37 +317,33 @@ export default function NotePage() {
     setIsSlackOpen(!isSlackOpen);
   };
 
+  // Post transcript and summary to Slack
   const postToSlack = async (selectedChannels: any) => {
     try {
       const transcriptText = messages
-        .map((message) => `${message.speaker} (${message.time}): ${message.text}`)
+        .map(
+          (message) => `${message.speaker} (${message.time}): ${message.text}`
+        )
         .join("\n");
-      
-      // Create a summary string (for example, using your overview and action items)
       const summaryText =
         "Charlie and Lisa discuss Otter AI, a meeting note-taking tool that transcribes and summarizes meetings in real-time. " +
         "Lisa explains how Otter works by joining meetings on her calendar and providing live notes, automatic screenshots, and action items. " +
         "Charlie is interested in using Otter for his own meetings and asks questions about how to set it up and share notes with his team.\n\n" +
-        "Action Items: " + actionItems.join(", ");
-        
+        "Action Items: " +
+        actionItems.join(", ");
       const payload = {
         transcript: transcriptText,
         summary: summaryText,
-        selectedChannels
+        selectedChannels,
       };
-
       const response = await fetch("/api/slack", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-
       if (!response.ok) {
         throw new Error("Failed to post to Slack");
       }
-
       console.log("Message posted to Slack successfully!");
       toast({
         title: "Posted to Slack",
@@ -377,7 +385,12 @@ export default function NotePage() {
               className="gap-2 text-black"
               onClick={handleSlackClick}
             >
-              <Image src={"/slack_icon.svg"} alt="Slack Logo" width={20} height={20} />
+              <Image
+                src={"/slack_icon.svg"}
+                alt="Slack Logo"
+                width={20}
+                height={20}
+              />
               Post to Slack
             </Button>
             <Button
@@ -400,7 +413,9 @@ export default function NotePage() {
             <div className="flex-1 overflow-y-auto">
               <div className="px-6 py-4">
                 <div className="flex items-center justify-between">
-                  <h1 className="text-2xl font-semibold">Learn how to use Otter</h1>
+                  <h1 className="text-2xl font-semibold">
+                    Learn how to use Otter
+                  </h1>
                   <Button variant="outline" size="sm">
                     <Pencil className="h-4 w-4 mr-2" />
                     Edit
@@ -416,7 +431,7 @@ export default function NotePage() {
                     <CalendarIcon className="h-4 w-4" />
                     <span>Today at 3:45 pm</span>
                     <Clock className="h-4 w-4" />
-                    <span>{duration}</span>
+                    <span>{formatTime(duration)}</span>
                     <Camera className="h-4 w-4" />
                     <span>6 Screenshots</span>
                     <Copy className="h-4 w-4" />
@@ -452,19 +467,27 @@ export default function NotePage() {
                       <div>
                         <h2 className="text-lg font-semibold mb-4">Overview</h2>
                         <p className="text-muted-foreground">
-                          Charlie and Lisa discuss Otter AI, a meeting note-taking tool that transcribes and summarizes
-                          meetings in real-time. Lisa explains how Otter works by joining meetings on her calendar and
-                          providing live notes, automatic screenshots, and action items. Charlie is interested in using
-                          Otter for his own meetings and asks questions about how to set it up and share notes with his
-                          team.
+                          Charlie and Lisa discuss Otter AI, a meeting
+                          note-taking tool that transcribes and summarizes
+                          meetings in real-time. Lisa explains how Otter works
+                          by joining meetings on her calendar and providing live
+                          notes, automatic screenshots, and action items.
+                          Charlie is interested in using Otter for his own
+                          meetings and asks questions about how to set it up and
+                          share notes with his team.
                         </p>
                       </div>
 
                       <div>
-                        <h2 className="text-lg font-semibold mb-4">Action Items</h2>
+                        <h2 className="text-lg font-semibold mb-4">
+                          Action Items
+                        </h2>
                         <div className="space-y-3">
                           {actionItems.map((item, i) => (
-                            <div key={i} className="flex items-center space-x-2">
+                            <div
+                              key={i}
+                              className="flex items-center space-x-2"
+                            >
                               <Checkbox id={`action-${i}`} />
                               <label htmlFor={`action-${i}`}>{item}</label>
                             </div>
@@ -476,10 +499,10 @@ export default function NotePage() {
 
                   <TabsContent value="transcript" className="mt-6">
                     <div className="space-y-6">
-                      <div>
-                        <h2 className="text-lg font-semibold mb-4">Speakers</h2>
-                        <div className="space-y-2">
-                          <div className="text-sm text-muted-foreground">Lisa (79%), Charlie (21%)</div>
+                      <div className="text-lg font-semibold mb-4">Speakers</div>
+                      <div className="space-y-2">
+                        <div className="text-sm text-muted-foreground">
+                          Lisa (79%), Charlie (21%)
                         </div>
                       </div>
 
@@ -493,8 +516,12 @@ export default function NotePage() {
                             </Avatar>
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
-                                <span className="font-medium">{message.speaker}</span>
-                                <span className="text-sm text-muted-foreground">{message.time}</span>
+                                <span className="font-medium">
+                                  {message.speaker}
+                                </span>
+                                <span className="text-sm text-muted-foreground">
+                                  {message.time}
+                                </span>
                               </div>
                               <p className="mt-1">{message.text}</p>
                             </div>
@@ -507,7 +534,28 @@ export default function NotePage() {
               </div>
             </div>
 
-            {/* Controls */}
+            {/* Audio Recording Controls (only visible when recording is active) */}
+            {isRecording && (
+              <div className="border-t p-4 flex items-center gap-4">
+                {!isPaused ? (
+                  <Button variant="ghost" onClick={handlePause}>
+                    <Pause className="h-4 w-4" />
+                    Pause Recording
+                  </Button>
+                ) : (
+                  <Button variant="ghost" onClick={handleResume}>
+                    <Play className="h-4 w-4" />
+                    Resume Recording
+                  </Button>
+                )}
+                <Button variant="ghost" onClick={handleStop}>
+                  <Square className="h-4 w-4" />
+                  Stop Recording
+                </Button>
+              </div>
+            )}
+
+            {/* Navigation Dock */}
             <div className="border-t">
               <NavigationDock />
             </div>
@@ -515,7 +563,10 @@ export default function NotePage() {
 
           {/* Right Sidebar */}
           <aside className="w-[38%] border-l h-full">
-            <Tabs defaultValue="ai-chat" className="w-full h-full flex flex-col">
+            <Tabs
+              defaultValue="ai-chat"
+              className="w-full h-full flex flex-col"
+            >
               <TabsList className="flex gap-1 justify-start border-b rounded-none p-4 bg-white sticky top-0 z-10">
                 <TabsTrigger
                   value="ai-chat"
@@ -537,7 +588,10 @@ export default function NotePage() {
                 </TabsTrigger>
               </TabsList>
 
-              <TabsContent value="ai-chat" className="flex-1 overflow-y-auto relative px-4">
+              <TabsContent
+                value="ai-chat"
+                className="flex-1 overflow-y-auto relative px-4"
+              >
                 <div className="space-y-4 pb-20">
                   <div className="flex flex-col justify-center items-center gap-4">
                     <h2 className="text-xl font-semibold text-center mt-10">
@@ -547,7 +601,10 @@ export default function NotePage() {
                       chat with your teammates
                     </h2>
                     {suggestions.map((suggestion, index) => (
-                      <div key={index} className="p-4 rounded-lg border w-80 hover:cursor-pointer hover:bg-gray-100">
+                      <div
+                        key={index}
+                        className="p-4 rounded-lg border w-80 hover:cursor-pointer hover:bg-gray-100"
+                      >
                         <div className="flex items-center gap-2">
                           <span className="text-purple-600">✨</span>
                           <span>{suggestion}</span>
@@ -570,14 +627,20 @@ export default function NotePage() {
                 </div>
               </TabsContent>
 
-              <TabsContent value="outline" className="flex-1 overflow-y-auto p-4">
+              <TabsContent
+                value="outline"
+                className="flex-1 overflow-y-auto p-4"
+              >
                 <div className="space-y-4">
                   <h2 className="text-xl font-semibold">Document Outline</h2>
                   {/* Add outline content here */}
                 </div>
               </TabsContent>
 
-              <TabsContent value="comments" className="flex-1 overflow-y-auto p-4">
+              <TabsContent
+                value="comments"
+                className="flex-1 overflow-y-auto p-4"
+              >
                 <div className="space-y-4">
                   <h2 className="text-xl font-semibold">Comments</h2>
                   {/* Add comments content here */}
@@ -588,7 +651,12 @@ export default function NotePage() {
         </main>
       </div>
 
-      <SlackDialog postToSlack={postToSlack} channels={channels} isOpen={isSlackOpen} onOpenChange={setIsSlackOpen} />
+      <SlackDialog
+        postToSlack={postToSlack}
+        channels={channels}
+        isOpen={isSlackOpen}
+        onOpenChange={setIsSlackOpen}
+      />
 
       <MediaLibraryDialog
         isOpen={isMediaLibraryOpen}

@@ -4,8 +4,17 @@ import supabase from '@/lib/supabase';
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { meeting_id, transcript, user_id } = body;
-    
+    const { 
+      meeting_id, 
+      transcript, 
+      user_id, 
+      context_files = [], 
+      embeddings = null,
+      generated_prompt = '',
+      chunks = 'lkdsajflksadjflkjdsaf',
+      suggestion_count = 0
+    } = body;
+
     if (!meeting_id || !transcript || !user_id) {
       return NextResponse.json(
         { error: 'Missing required fields: meeting_id, transcript, or user_id' },
@@ -28,28 +37,38 @@ export async function POST(request: Request) {
     }
 
     let result;
-    
+
     if (existingMeeting) {
       const { data, error } = await supabase
         .from('meetings')
-        .update({ transcript })
+        .update({ 
+          transcript,
+          context_files,
+          embeddings,
+          generated_prompt,
+          chunks,
+          suggestion_count
+        })
         .eq('meeting_id', meeting_id)
         .select();
-      
+
       if (error) throw error;
       result = { updated: true, data };
-    } 
-    else {
+    } else {
       const { data, error } = await supabase
         .from('meetings')
-        .insert([{ 
-          meeting_id, 
-          transcript, 
+        .insert([{
+          meeting_id,
+          transcript,
           user_id,
-          suggestion_count: 0
+          context_files,
+          embeddings,
+          generated_prompt,
+          chunks,
+          suggestion_count
         }])
         .select();
-      
+
       if (error) throw error;
       result = { inserted: true, data };
     }
@@ -58,7 +77,7 @@ export async function POST(request: Request) {
   } catch (error) {
     console.error('Error saving transcript:', error);
     return NextResponse.json(
-      { error: 'Failed to save transcript' },
+      { error: 'Failed to save transcript', details: error },
       { status: 500 }
     );
   }
