@@ -1,71 +1,62 @@
-"use client";
+"use client"
 
-import React, { useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  CalendarIcon,
-  Video,
-  ChevronDown,
-  ChevronUp,
-  RefreshCcw,
-  Settings,
-} from "lucide-react";
-import { cn } from "@/lib/utils";
-import Image from "next/image";
-import { Calendar } from "@/components/ui/calendar";
-import { format } from "date-fns";
-import { signIn } from "next-auth/react";
-import CalendarEventsList from "./calendarEventsList";
-export function RightSidebar({session}: any) {
-  const [activeTab, setActiveTab] = useState("meetings");
-  const [collapsed, setCollapsed] = useState(false);
-  const [date, setDate] = useState<Date | undefined>(new Date());
-  const [currentMonth, setCurrentMonth] = useState(new Date());
-  const [calendarVisible, setCalendarVisible] = useState(true);
-  const [events, setEvents] = useState<any[]>([]);
+import React, { useState } from "react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { CalendarIcon, Video, ChevronDown, ChevronUp, RefreshCcw, Settings } from "lucide-react"
+import { cn } from "@/lib/utils"
+import Image from "next/image"
+import { Calendar } from "@/components/ui/calendar"
+import { format } from "date-fns"
+import { signIn } from "next-auth/react"
+import CalendarEventsList from "./calendarEventsList"
+import { ActionItems } from "./actionItems"
+export function RightSidebar({ session }: any) {
+  const [activeTab, setActiveTab] = useState("meetings")
+  const [collapsed, setCollapsed] = useState(false)
+  const [date, setDate] = useState<Date | undefined>(new Date())
+  const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [calendarVisible, setCalendarVisible] = useState(true)
+  const [events, setEvents] = useState<any[]>([])
 
-     const handleSignIn = async () => {
-       await signIn("google");
-     };
+  const handleSignIn = async () => {
+    await signIn("google")
+  }
   const handleToday = () => {
-    const today = new Date();
-    setDate(today);
-    setCurrentMonth(today);
-  };
-      const fetchCalendarEvents = async () => {
-        console.log("session in fetch calendar events",session);
-        if (session) {
-          try {
-            const response = await fetch(
-              "https://www.googleapis.com/calendar/v3/calendars/primary/events",
-              {
-                headers: {
-                  Authorization: `Bearer ${session.accessToken}`,
-                },
-              }
-            );
-            if (!response.ok) {
-              throw new Error(`HTTP error! status: ${response.status}`);
-            }
-            const data = await response.json();
-            console.log("events data",data);
-            setEvents(data.items || []);
-          } catch (error) {
-            console.error("Error fetching calendar events:", error);
-          }
+    const today = new Date()
+    setDate(today)
+    setCurrentMonth(today)
+  }
+  const fetchCalendarEvents = async () => {
+    console.log("session in fetch calendar events", session)
+    if (session) {
+      try {
+        const response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+          headers: {
+            Authorization: `Bearer ${session.accessToken}`,
+          },
+        })
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`)
         }
-      };
+        const data = await response.json()
+        console.log("events data", data)
+        setEvents(data.items || [])
+      } catch (error) {
+        console.error("Error fetching calendar events:", error)
+      }
+    }
+  }
 
-      React.useEffect(() => {
-        fetchCalendarEvents();
-      }, [session]);
+  React.useEffect(() => {
+    fetchCalendarEvents()
+  }, [session])
 
   return (
     <div
       className={cn(
         "border-l bg-white flex flex-col h-screen transition-all duration-300",
-        collapsed ? "w-12" : "w-[25%]"
+        collapsed ? "w-12" : "w-[25%]",
       )}
     >
       <div className="flex border-b">
@@ -107,26 +98,11 @@ export function RightSidebar({session}: any) {
             </Button>
           </>
         )}
-        <Button
-          variant="ghost"
-          size="icon"
-          className=""
-          onClick={() => setCollapsed(!collapsed)}
-        >
+        <Button variant="ghost" size="icon" className="" onClick={() => setCollapsed(!collapsed)}>
           {collapsed ? (
-            <Image
-              src={"/navigateleft.svg"}
-              alt={"navigate"}
-              height={25}
-              width={25}
-            />
+            <Image src={"/navigateleft.svg"} alt={"navigate"} height={25} width={25} />
           ) : (
-            <Image
-              src={"/navigateright.svg"}
-              alt={"navigate"}
-              height={25}
-              width={25}
-            />
+            <Image src={"/navigateright.svg"} alt={"navigate"} height={25} width={25} />
           )}
         </Button>
       </div>
@@ -136,38 +112,25 @@ export function RightSidebar({session}: any) {
           {activeTab === "meetings" && (
             <div>
               <div>
-                <h2 className="text-xl font-semibold mb-2">
-                  Record a live meeting
-                </h2>
-                <p className="text-sm text-gray-500 mb-4">
-                  Works with Zoom, Google Meet, or Microsoft Teams
-                </p>
-                <Input
-                  placeholder="Paste meeting URL to add Otter"
-                  className="mb-4"
-                />
+                <h2 className="text-xl font-semibold mb-2">Record a live meeting</h2>
+                <p className="text-sm text-gray-500 mb-4">Works with Zoom, Google Meet, or Microsoft Teams</p>
+                <Input placeholder="Paste meeting URL to add Otter" className="mb-4" />
               </div>
 
               <div>
-                <h2 className="text-lg font-semibold mb-2">
-                  Record scheduled meetings
-                </h2>
+                <h2 className="text-lg font-semibold mb-2">Record scheduled meetings</h2>
                 <div className="space-y-4 border border-gray-200 rounded-xl p-[4%]">
                   <div className="">
                     <h3 className="font-medium mb-2">AI Notetaker settings</h3>
                     <p className="text-sm font-semibold">Otter will join:</p>
                     <div className="flex items-center mt-2">
                       <Video className="w-4 h-4 mr-2 text-gray-500" />
-                      <span className="text-sm">
-                        Meetings with a video conference link
-                      </span>
+                      <span className="text-sm">Meetings with a video conference link</span>
                     </div>
                   </div>
 
                   <div>
-                    <p className="text-sm mb-2 font-semibold">
-                      Share notes with
-                    </p>
+                    <p className="text-sm mb-2 font-semibold">Share notes with</p>
                     <div className="flex items-center">
                       <CalendarIcon className="w-4 h-4 mr-2 text-gray-500" />
                       <span className="text-sm">Calendar invite guests</span>
@@ -178,31 +141,20 @@ export function RightSidebar({session}: any) {
 
               <div className="mt-4">
                 <p className="text-sm text-gray-500 mb-4">
-                  Looks like you don&apos;t have any upcoming meetings with a
-                  conferencing link from
+                  Looks like you don&apos;t have any upcoming meetings with a conferencing link from
                 </p>
-                <p className="text-sm text-gray-600 mb-2">
-                  You can connect to additional calendars.
-                </p>
+                <p className="text-sm text-gray-600 mb-2">You can connect to additional calendars.</p>
                 <div className="space-x-2">
                   <Button variant="outline" className="text-sm">
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="w-4 h-4 mr-2"
-                      fill="#4285F4"
-                    >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="#4285F4">
                       <path d="M12 0C5.372 0 0 5.372 0 12s5.372 12 12 12 12-5.372 12-12S18.628 0 12 0zm6.804 16.863h-1.758v-6.956H8.954v6.956H7.196V7.137h1.758v6.956h6.092V7.137h1.758v9.726z" />
                     </svg>
                     Google
                   </Button>
                   <Button variant="outline" className="text-sm">
-                    <svg
-                      viewBox="0 0 24 24"
-                      className="w-4 h-4 mr-2"
-                      fill="#00A4EF"
-                    >
+                    <svg viewBox="0 0 24 24" className="w-4 h-4 mr-2" fill="#00A4EF">
                       <path d="M0 0h24v24H0z" fill="none" />
-                      <path d="M21.53 4.306v15.363q0 .807-.576 1.383l-3.723 3.723q-.576.576-1.383.576H3.557q-.807 0-1.383-.576l-3.723-3.723q-.576-.576-.576-1.383V4.306q0-.807.576-1.383L3.557.176q.576-.576 1.383-.576h12.318q.807 0 1.383.576l3.723 3.723q.576.576.576 1.383zm-18.753 0v15.363h15.363V4.306H2.777z" />
+                      <path d="M21.53 4.306v15.363q0 .807-.576 1.383l-3.723 3.723q-.576.576-1.383.576H3.557q-.807 0-1.383-.576l-3.723-3.723q-.576-.576-.576-1.383V4.306q0-.807.576-.576L3.557.176q.576-.576 1.383-.576h12.318q.807 0 1.383.576l3.723 3.723q.576.576.576 1.383zm-18.753 0v15.363h15.363V4.306H2.777z" />
                     </svg>
                     Outlook
                   </Button>
@@ -214,16 +166,9 @@ export function RightSidebar({session}: any) {
           {activeTab === "calendar" && (
             <div className="w-full space-y-4">
               <div className="flex items-center justify-between">
-                <h2 className="text-xl font-semibold">
-                  {format(currentMonth, "MMM yyyy")}
-                </h2>
+                <h2 className="text-xl font-semibold">{format(currentMonth, "MMM yyyy")}</h2>
                 <div className="flex items-center gap-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="flex items-center gap-2"
-                    onClick={handleToday}
-                  >
+                  <Button variant="ghost" size="sm" className="flex items-center gap-2" onClick={handleToday}>
                     <RefreshCcw className="h-4 w-4" />
                     <span>Today</span>
                   </Button>
@@ -245,12 +190,10 @@ export function RightSidebar({session}: any) {
                         day_selected:
                           "bg-purple-500 rounded-full text-primary-foreground hover:bg-purple-600 hover:text-primary-foreground focus:bg-purple-600 focus:text-primary-foreground",
                         day_today: "bg-accent text-accent-foreground",
-                        head_cell:
-                          "text-muted-foreground font-normal text-center w-12",
+                        head_cell: "text-muted-foreground font-normal text-center w-12",
                         cell: "h-10 w-12 text-center p-0 relative [&:has([aria-selected])]:bg-accent rounded-full first:[&:has([aria-selected])]:rounded-full last:[&:has([aria-selected])]:rounded-full focus-within:relative focus-within:z-20",
                         day: "h-10 w-12 p-0 font-normal aria-selected:opacity-100",
-                        caption:
-                          "flex justify-center pt-1 relative items-center",
+                        caption: "flex justify-center pt-1 relative items-center",
                         table: "w-full border-collapse space-y-1",
                       }}
                     />
@@ -264,27 +207,16 @@ export function RightSidebar({session}: any) {
                   className="rounded-full"
                   onClick={() => setCalendarVisible(!calendarVisible)}
                 >
-                  {calendarVisible ? (
-                    <ChevronUp className="h-4 w-4" />
-                  ) : (
-                    <ChevronDown className="h-4 w-4" />
-                  )}
+                  {calendarVisible ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
                 </Button>
               </div>
               <div className="space-y-4">
                 {session ? (
                   <div className="overflow-y-auto h-44 p-2">
-                    {events.length > 0 ? (
-                      <CalendarEventsList events={events} />
-                    ) : (
-                      <p>No events found.</p>
-                    )}
+                    {events.length > 0 ? <CalendarEventsList events={events} /> : <p>No events found.</p>}
                   </div>
                 ) : (
-                  <Button
-                    onClick={handleSignIn}
-                    className="flex items-center gap-2"
-                  >
+                  <Button onClick={handleSignIn} className="flex items-center gap-2">
                     <svg viewBox="0 0 24 24" className="w-5 h-5">
                       <path
                         fill="#4285F4"
@@ -313,11 +245,11 @@ export function RightSidebar({session}: any) {
           {activeTab === "actions" && (
             <div>
               <h2 className="text-xl font-semibold mb-4">Actions</h2>
-              <p>Content for the Actions tab goes here.</p>
+              <ActionItems />
             </div>
           )}
         </div>
       )}
     </div>
-  );
+  )
 }

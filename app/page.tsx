@@ -1,6 +1,6 @@
 import { Sidebar } from "@/components/sidebar";
 import { RightSidebar } from "@/components/right-sidebar";
-import { ChatInterface } from "@/components/chatbox";
+// import { ChatInterface } from "@/components/chatbox";
 import ClientHome from "@/components/clientHome"; 
 import { getServerSession } from "next-auth";
 import { authOptions } from "./api/auth/[...nextauth]/options";
@@ -13,7 +13,7 @@ export default async function Home() {
       <Sidebar />
       <ClientHome />
       <RightSidebar session={session} />
-      <ChatInterface />
+      {/* <ChatInterface /> */}
     </div>
   );
 }

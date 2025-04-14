@@ -165,7 +165,7 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
-        <div className="flex items-center space-x-2">
+        {/* <div className="flex items-center space-x-2">
           <Button
             variant="ghost"
             size="icon"
@@ -206,7 +206,7 @@ export function Header({ activeSection, onSectionChange }: HeaderProps) {
               Library
             </Button>
           )}
-        </div>
+        </div> */}
       </header>
       {isVideoRecording && (
         <VideoPreview
