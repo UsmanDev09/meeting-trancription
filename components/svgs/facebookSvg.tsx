@@ -1,6 +1,7 @@
 import React from 'react';
 import { toast } from 'react-toastify';
 import { signIn } from 'next-auth/react';
+import { AuthError } from '@supabase/supabase-js';
 
 function FacebookSvg() {
   const loginWithFacebook = async () => {
