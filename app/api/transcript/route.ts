@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import supabase from '@/lib/supabase';
+import createClient from '@/lib/supabase';
 
 export async function POST(request: Request) {
   try {
@@ -22,6 +22,7 @@ export async function POST(request: Request) {
       );
     }
 
+    const supabase = await createClient();
     const { data: existingMeeting, error: fetchError } = await supabase
       .from('meetings')
       .select('id')

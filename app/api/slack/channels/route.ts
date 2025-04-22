@@ -1,4 +1,6 @@
 import { NextResponse } from 'next/server';
+import createClient from '@/lib/supabase';
+import { cookies } from 'next/headers';
 
 interface SlackChannel {
   id: string;
@@ -13,50 +15,43 @@ interface SlackResponse {
   };
   error?: string;
 }
-
-async function fetchAllChannels(slackToken: string): Promise<SlackChannel[]> {
-  let channels: SlackChannel[] = [];
-  let cursor: string | undefined = undefined;
-
-  do {
-    const params = new URLSearchParams({
-      limit: '100',
-      types: 'public_channel,private_channel',
-    });
-    if (cursor) {
-      params.append('cursor', cursor);
+async function fetchAllChannels(token: string) {
+  const response = await fetch('https://slack.com/api/conversations.list', {
+    headers: {
+      'Authorization': `Bearer ${token}`
     }
-
-    const response = await fetch(
-      `https://slack.com/api/conversations.list?${params.toString()}`,
-      {
-        method: 'GET',
-        headers: {
-          'Authorization': `Bearer ${slackToken}`,
-          'Content-Type': 'application/x-www-form-urlencoded'
-        }
-      }
-    );
-
-    const data: SlackResponse = await response.json();
-    if (!data.ok) {
-      throw new Error(data.error || 'Failed to fetch channels');
-    }
-
-    channels = channels.concat(data.channels);
-    cursor = data.response_metadata?.next_cursor;
-  } while (cursor);
-
-  return channels;
+  });
+  
+  const data = await response.json();
+  
+  if (!data.ok) {
+    throw new Error(data.error || 'Failed to fetch channels');
+  }
+  
+  return data.channels.map((channel: any) => ({
+    id: channel.id,
+    name: channel.name,
+  }));
 }
-
 export async function GET(request: Request) {
   try {
-    const slackToken = process.env.SLACK_TOKEN;
-    if (!slackToken) {
-      return NextResponse.json({ error: 'Missing Slack configuration' }, { status: 500 });
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const { data: slackTokenData, error: slackTokenError } = await supabase
+      .from('user_slack_tokens')
+      .select('slack_token')
+      .eq('user_id', user.id)
+      .single();
+
+    if (slackTokenError || !slackTokenData) {
+      return NextResponse.json({ error: 'Slack not connected' }, { status: 401 });
     }
 
+    const slackToken = slackTokenData.slack_token;
     const channels = await fetchAllChannels(slackToken);
     return NextResponse.json({ channels });
   } catch (error: any) {

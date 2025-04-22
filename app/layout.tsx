@@ -5,6 +5,8 @@ import { ThemeProvider } from "@/components/theme-provider";
 import Provider from "@/components/Provider";
 import { SessionProvider } from "next-auth/react";
 import { Rubik } from 'next/font/google';
+import { ReduxProvider } from "@/redux/provider";
+
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
@@ -23,7 +25,9 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <body className={rubik.className}>
         <ThemeProvider attribute="class" defaultTheme="light">
-          <Provider>{children}</Provider>
+          <ReduxProvider>
+            <Provider>{children}</Provider>
+          </ReduxProvider>
         </ThemeProvider>
       </body>
     </html>

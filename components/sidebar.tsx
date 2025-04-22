@@ -9,7 +9,7 @@ import {
   Bot,
   UserPlus,
   UserPlus2,
-  
+  FileText,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
@@ -135,6 +135,16 @@ export function Sidebar() {
         >
           <Layout className="w-5 h-5" />
           {!collapsed && <span>Apps</span>}
+        </Link>
+        <Link
+          href="/transcripts"
+          className={cn(
+            "flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:text-gray-900 ",
+           "bg-gray-100 text-gray-900"
+          )}
+        >
+          <FileText className="h-4 w-4" />
+          Transcripts
         </Link>
       </nav>
     </div>
