@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Home,
   Search,
@@ -10,15 +10,23 @@ import {
   UserPlus,
   UserPlus2,
   FileText,
+  BarChart,
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "./ui/button";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
-export function Sidebar() {
-  const [collapsed, setCollapsed] = useState(false);
+interface User {
+  name?: string;
+  email?: string;
+}
 
+export function Sidebar({ user }: { user: User }) {
+  const [collapsed, setCollapsed] = useState(false);
+  useEffect(()=>{
+    
+  },[])
   return (
     <div
       className={cn(
@@ -76,8 +84,8 @@ export function Sidebar() {
                     G
                   </div>
                   <div className="flex-1">
-                    <p className="text-sm font-medium">Ghost</p>
-                    <p className="text-xs text-gray-500">demo@gmail.com</p>
+                    <p className="text-sm font-medium">{user?.name || "User"}</p>
+                    <p className="text-xs text-gray-500">{user?.email || "demo@gmail.com"}</p>
                   </div>
                 </div>
 
@@ -137,6 +145,16 @@ export function Sidebar() {
           {!collapsed && <span>Apps</span>}
         </Link>
         <Link
+          href="/analytics"
+          className={cn(
+            "flex items-center space-x-2 p-2 rounded-lg hover:bg-gray-100",
+            collapsed && "justify-center"
+          )}
+        >
+          <BarChart className="w-5 h-5" />
+          {!collapsed && <span>Analytics</span>}
+        </Link>
+        {/* <Link
           href="/transcripts"
           className={cn(
             "flex items-center gap-3 rounded-lg px-3 py-2 text-gray-500 transition-all hover:text-gray-900 ",
@@ -145,7 +163,7 @@ export function Sidebar() {
         >
           <FileText className="h-4 w-4" />
           Transcripts
-        </Link>
+        </Link> */}
       </nav>
     </div>
   );

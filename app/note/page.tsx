@@ -32,6 +32,9 @@ import { useChat, useCompletion } from "@ai-sdk/react";
 import { SlackAuthDialog } from "@/components/slackAuthDialog";
 import { useAppSelector } from '@/redux/hooks';
 import { getSlackToken, isSlackConnected as selectIsSlackConnected } from '@/redux/utils';
+import createClient from "@/lib/supabase";
+import { useDispatch } from "react-redux";
+import { RootState } from "@/redux/store";
 
 interface MediaFile {
   id: string;
@@ -76,50 +79,106 @@ export default function NotePage() {
     api: "/api/note",
   });
 
-  const { complete, completion, isLoading } = useCompletion({
+  const { complete, completion, isLoading: isCompletionLoading } = useCompletion({
     api: "/api/completion",
   });
 
-  const [msgs, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      speaker: "Charlie",
-      initial: "C",
-      time: "0:00",
-      text: "Hey Lisa, I got your email with a meeting summary from Otter and I was curious about how it works. Have you been using it a lot for your meetings?",
-    },
-    {
-      id: "2",
-      speaker: "Lisa",
-      initial: "L",
-      time: "0:08",
-      text: "Yeah, I started using Otter a few months ago. And it saved me a lot of time from...",
-    },
-  ]);
+  const [msgs, setMessages] = useState<Message[]>([]);
   const [isSlackAuthOpen, setIsSlackAuthOpen] = useState(false);
   const [userName, setUserName] = useState<string>("");
   const [userEmail, setUserEmail] = useState<string>("");
+  const [isLoadingTranscripts, setIsLoadingTranscripts] = useState(true);
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [selectedMeeting, setSelectedMeeting] = useState<string | null>(null);
 
+  const { user } = useAppSelector((state: RootState) => state.auth);
 
   useEffect(() => {
-    // const getUser = async () => {
-    //   const {
-    //     data: { user },
-    //   } = await supabase.auth.getUser();
-    //   if (user) {
-    //     setUserId(user.id);
-    //     setUserName(user.user_metadata?.full_name || user.email?.split('@')[0] || 'User');
-    //     setUserEmail(user.email || '');
-        
-    //     // Check if user has Slack connected by checking the cookie
-    //     const cookieStore = document.cookie;
-    //     const hasSlackToken = cookieStore.includes('slack_token=');
-    //     setIsSlackConnected(hasSlackToken);
-    //   }
-    // };
-    // getUser();
     setCurrentMeetingId(`meeting_${Date.now()}`);
-  }, []);
+    if (user) {
+      console.log("User from Redux:", user);
+      setUserId(user.id);
+      setUserName(user.name || '');
+      setUserEmail(user.email || '');
+      
+      fetchMeetingTranscripts(user.id);
+    } else {
+      console.log("No authenticated user found in Redux");
+      setIsLoadingTranscripts(false);
+      toast({
+        title: "Not authenticated",
+        description: "Please sign in to access your meeting transcripts",
+        variant: "destructive",
+      });
+    }
+  }, [user]);
+  const fetchMeetingTranscripts = async (userId: string | null) => {
+    if (!userId) {
+      setIsLoadingTranscripts(false);
+      return;
+    }
+    
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      console.error('Invalid user ID format. Expected UUID.');
+      toast({
+        title: "Authentication Error",
+        description: "Invalid user identifier. Please sign in again.",
+        variant: "destructive",
+      });
+      setIsLoadingTranscripts(false);
+      return;
+    }
+    
+    try {
+      setIsLoadingTranscripts(true);
+      console.log(`Fetching meeting transcripts for user ID: ${userId}`);
+      
+      const response = await fetch(`/api/meetings?user_id=${userId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('API error response:', errorData);
+        throw new Error(errorData?.error || `Failed to fetch meeting transcripts: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Retrieved ${data.length} meetings from API`);
+      setMeetings(data);
+      
+      // If there's at least one meeting with messages, select it
+      if (data.length > 0 && data[0].messages && data[0].messages.length > 0) {
+        setSelectedMeeting(data[0].meeting_id);
+        setMessages(data[0].messages);
+      } else {
+        // No meetings or no messages in the first meeting
+        setMessages([]);
+      }
+      
+      setIsLoadingTranscripts(false);
+    } catch (error) {
+      console.error('Error fetching meeting transcripts:', error);
+      setIsLoadingTranscripts(false);
+      toast({
+        title: "Error",
+        description: typeof error === 'object' && error !== null && 'message' in error 
+          ? (error as Error).message 
+          : "Failed to fetch meeting transcripts",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Function to handle meeting selection change
+  const handleMeetingChange = (meetingId: string) => {
+    setSelectedMeeting(meetingId);
+    const meeting = meetings.find(m => m.meeting_id === meetingId);
+    if (meeting && meeting.messages) {
+      setMessages(meeting.messages);
+    } else {
+      setMessages([]);
+    }
+  };
 
   useEffect(() => {
     if (searchParams.get("record") === "audio" && !isRecording) {
@@ -264,7 +323,8 @@ export default function NotePage() {
 
   // Save transcript to the database
   const saveTranscript = async (meetingId: string) => {
-    if (!userId) {
+    // Use user ID from Redux rather than component state
+    if (!user) {
       toast({
         title: "Authentication required",
         description: "Please sign in to save transcripts",
@@ -272,6 +332,7 @@ export default function NotePage() {
       });
       return;
     }
+    
     try {
       setIsSaving(true);
       const transcriptText = msgs
@@ -286,7 +347,7 @@ export default function NotePage() {
       const suggestions = actionItems;
       const embeddings = null;
       const payload = {
-        user_id: userId,
+        user_id: user.id, // Use Redux user ID
         meeting_id: meetingId,
         transcript: transcriptText,
         context_files: contextFiles,
@@ -296,10 +357,11 @@ export default function NotePage() {
         suggestion_count: suggestions.length,
       };
 
-      const response = await fetch("/api/transcript", {
+      console.log("Saving transcript with user ID:", user.id);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/generate_actions`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
+        body: JSON.stringify({transcript:payload}),
       });
 
       if (!response.ok) {
@@ -447,7 +509,7 @@ Question: ${input}
   };
   return (
     <div className="flex min-h-screen bg-white">
-      <Sidebar />
+      <Sidebar user={{ name: userName || "User", email: userEmail || "demo@gmail.com" }} />
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Header */}
         <header className="py-4 flex items-center justify-between border-b px-4">
@@ -585,6 +647,44 @@ Question: ${input}
 
                   <TabsContent value="transcript" className="mt-6">
                     <div className="space-y-6">
+                      {isLoadingTranscripts ? (
+                        <div className="flex items-center justify-center p-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                        </div>
+                      ) : meetings.length > 0 ? (
+                        <div className="mb-4">
+                          <label htmlFor="meeting-select" className="block text-sm font-medium text-gray-700 mb-1">
+                            Select Meeting
+                          </label>
+                          <select
+                            id="meeting-select"
+                            value={selectedMeeting || ''}
+                            onChange={(e) => {
+                              const meetingId = e.target.value;
+                              setSelectedMeeting(meetingId);
+                              const meeting = meetings.find(m => m.meeting_id === meetingId);
+                              if (meeting && meeting.messages) {
+                                setMessages(meeting.messages);
+                              } else {
+                                setMessages([]);
+                              }
+                            }}
+                            className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                          >
+                            <option value="" disabled>Select a meeting</option>
+                            {meetings.map((meeting) => (
+                              <option key={meeting.meeting_id} value={meeting.meeting_id}>
+                                {meeting.meeting_id} - {new Date(meeting.created_at).toLocaleString()}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="text-center p-4 text-gray-500">
+                          No meeting transcripts found.
+                        </div>
+                      )}
+
                       <div className="text-lg font-semibold mb-4">Speakers</div>
                       <div className="space-y-2">
                         <div className="text-sm text-muted-foreground">
@@ -762,9 +862,9 @@ Question: ${input}
                     <button
                       type="submit"
                       className="bg-purple-600 text-white px-4 py-2 rounded-full hover:bg-purple-700 transition-colors disabled:opacity-50"
-                      disabled={isLoading || !input.trim()}
+                      disabled={isCompletionLoading || !input.trim()}
                     >
-                      {isLoading ? "..." : "Ask"}
+                      {isCompletionLoading ? "..." : "Ask"}
                     </button>
                   </form>
                 </div>

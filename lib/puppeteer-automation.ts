@@ -114,7 +114,7 @@ export async function joinGoogleMeetAndTranscribe(
     
     // Launch browser using puppeteer-extra with stealth plugin
     browser = await puppeteerExtra.launch({
-      headless: true,
+      headless: false,
       args: [
         '--disable-features=IsolateOrigins,site-per-process',
         '--disable-infobars',
