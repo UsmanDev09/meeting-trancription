@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Sidebar } from "@/components/sidebar";
+import { RootState } from "@/redux/store";
+import { useAppSelector } from "@/redux/hooks";
 
 export default function ChatPage() {
   const [messages, setMessages] = useState([
@@ -29,10 +31,10 @@ export default function ChatPage() {
     setMessages([...messages, { role: "user", content: input }]);
     setInput("");
   };
-
+   const { user } = useAppSelector((state: RootState) => state.auth);
   return (
     <div className="flex h-screen">
-      <Sidebar />
+      <Sidebar user={user || {id: '', email: 'demo@user.com', name: 'User'}} />
       <div className="flex flex-col flex-1">
         <div className="border-b">
           <div className="flex items-center gap-2 p-4">

@@ -24,11 +24,17 @@ import { Sidebar } from "@/components/sidebar";
 import { MediaLibraryDialog } from "@/components/mediaLibraryDialog";
 import Image from "next/image";
 import { Checkbox } from "@radix-ui/react-checkbox";
-import React from "react";
+import type React from "react";
 import { NavigationDock } from "@/components/navigationDock";
 import { SlackDialog } from "@/components/slackDialog";
-import supabase from "@/lib/supabase";
 import { toast } from "@/hooks/use-toast";
+import { useChat, useCompletion } from "@ai-sdk/react";
+import { SlackAuthDialog } from "@/components/slackAuthDialog";
+import { useAppSelector } from '@/redux/hooks';
+import { getSlackToken, isSlackConnected as selectIsSlackConnected } from '@/redux/utils';
+import createClient from "@/lib/supabase";
+import { useDispatch } from "react-redux";
+import { RootState } from "@/redux/store";
 
 interface MediaFile {
   id: string;
@@ -69,35 +75,110 @@ export default function NotePage() {
   const [channels, setChannels] = useState<Channel[]>([]);
   const [recordings, setRecordings] = useState<MediaFile[]>([]);
   const [uploadedFiles, setUploadedFiles] = useState<MediaFile[]>([]);
-  const [messages, setMessages] = useState<Message[]>([
-    {
-      id: "1",
-      speaker: "Charlie",
-      initial: "C",
-      time: "0:00",
-      text: "Hey Lisa, I got your email with a meeting summary from Otter and I was curious about how it works. Have you been using it a lot for your meetings?",
-    },
-    {
-      id: "2",
-      speaker: "Lisa",
-      initial: "L",
-      time: "0:08",
-      text: "Yeah, I started using Otter a few months ago. And it saved me a lot of time from...",
-    },
-  ]);
+  const { messages, input, handleInputChange, handleSubmit } = useChat({
+    api: "/api/note",
+  });
+
+  const { complete, completion, isLoading: isCompletionLoading } = useCompletion({
+    api: "/api/completion",
+  });
+
+  const [msgs, setMessages] = useState<Message[]>([]);
+  const [isSlackAuthOpen, setIsSlackAuthOpen] = useState(false);
+  const [userName, setUserName] = useState<string>("");
+  const [userEmail, setUserEmail] = useState<string>("");
+  const [isLoadingTranscripts, setIsLoadingTranscripts] = useState(true);
+  const [meetings, setMeetings] = useState<any[]>([]);
+  const [selectedMeeting, setSelectedMeeting] = useState<string | null>(null);
+
+  const { user } = useAppSelector((state: RootState) => state.auth);
 
   useEffect(() => {
-    const getUser = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      if (user) {
-        setUserId(user.id);
-      }
-    };
-    getUser();
     setCurrentMeetingId(`meeting_${Date.now()}`);
-  }, []);
+    if (user) {
+      console.log("User from Redux:", user);
+      setUserId(user.id);
+      setUserName(user.name || '');
+      setUserEmail(user.email || '');
+      
+      fetchMeetingTranscripts(user.id);
+    } else {
+      console.log("No authenticated user found in Redux");
+      setIsLoadingTranscripts(false);
+      toast({
+        title: "Not authenticated",
+        description: "Please sign in to access your meeting transcripts",
+        variant: "destructive",
+      });
+    }
+  }, [user]);
+  const fetchMeetingTranscripts = async (userId: string | null) => {
+    if (!userId) {
+      setIsLoadingTranscripts(false);
+      return;
+    }
+    
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-5][0-9a-f]{3}-[089ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+    if (!uuidRegex.test(userId)) {
+      console.error('Invalid user ID format. Expected UUID.');
+      toast({
+        title: "Authentication Error",
+        description: "Invalid user identifier. Please sign in again.",
+        variant: "destructive",
+      });
+      setIsLoadingTranscripts(false);
+      return;
+    }
+    
+    try {
+      setIsLoadingTranscripts(true);
+      console.log(`Fetching meeting transcripts for user ID: ${userId}`);
+      
+      const response = await fetch(`/api/meetings?user_id=${userId}`);
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        console.error('API error response:', errorData);
+        throw new Error(errorData?.error || `Failed to fetch meeting transcripts: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      console.log(`Retrieved ${data.length} meetings from API`);
+      setMeetings(data);
+      
+      // If there's at least one meeting with messages, select it
+      if (data.length > 0 && data[0].messages && data[0].messages.length > 0) {
+        setSelectedMeeting(data[0].meeting_id);
+        setMessages(data[0].messages);
+      } else {
+        // No meetings or no messages in the first meeting
+        setMessages([]);
+      }
+      
+      setIsLoadingTranscripts(false);
+    } catch (error) {
+      console.error('Error fetching meeting transcripts:', error);
+      setIsLoadingTranscripts(false);
+      toast({
+        title: "Error",
+        description: typeof error === 'object' && error !== null && 'message' in error 
+          ? (error as Error).message 
+          : "Failed to fetch meeting transcripts",
+        variant: "destructive",
+      });
+    }
+  };
+  
+  // Function to handle meeting selection change
+  const handleMeetingChange = (meetingId: string) => {
+    setSelectedMeeting(meetingId);
+    const meeting = meetings.find(m => m.meeting_id === meetingId);
+    if (meeting && meeting.messages) {
+      setMessages(meeting.messages);
+    } else {
+      setMessages([]);
+    }
+  };
 
   useEffect(() => {
     if (searchParams.get("record") === "audio" && !isRecording) {
@@ -208,7 +289,7 @@ export default function NotePage() {
 
   const deleteFile = (id: string, isRecording: boolean) => {
     if (isRecording) {
-      setRecordings((prev) => prev.filter((rec) => rec.id !== id));
+      setRecordings((prev) => prev.filter((recording) => recording.id !== id));
     } else {
       setUploadedFiles((prev) => prev.filter((file) => file.id !== id));
     }
@@ -229,65 +310,83 @@ export default function NotePage() {
     "Choose which meetings you want Otter to join and take notes",
   ];
 
+  const handleSuggestionClick = (suggestion: string) => {
+    handleInputChange({
+      target: { value: suggestion },
+    } as React.ChangeEvent<HTMLInputElement>);
+    const customEvent = {
+      preventDefault: () => {},
+    } as React.FormEvent<HTMLFormElement>;
+    
+    handleCompletionSubmit(customEvent);
+  };
+
   // Save transcript to the database
-const saveTranscript = async (meetingId: string) => {
-  if (!userId) {
-    toast({
-      title: "Authentication required",
-      description: "Please sign in to save transcripts",
-      variant: "destructive",
-    });
-    return;
-  }
-  try {
-    setIsSaving(true);
-    const transcriptText = messages
-      .map((message) => `${message.speaker} (${message.time}): ${message.text}`)
-      .join("\n");
-    const contextFiles =
-    recordings.length > 0 ? recordings.map((recording) => recording.url) : [];
-    const suggestions = actionItems;
-    const embeddings = null; 
-    const payload = {
-      user_id: userId,
-      meeting_id: meetingId,
-      transcript: transcriptText,
-      context_files: contextFiles,
-      embeddings: embeddings,
-      generated_prompt: suggestions.join(", "),
-      chunks: 'lkajdsflksajfd',
-      suggestion_count: suggestions.length,
-    };
-
-    const response = await fetch("/api/transcript", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
-    });
-
-    if (!response.ok) {
-      throw new Error("Failed to save transcript");
+  const saveTranscript = async (meetingId: string) => {
+    // Use user ID from Redux rather than component state
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "Please sign in to save transcripts",
+        variant: "destructive",
+      });
+      return;
     }
+    
+    try {
+      setIsSaving(true);
+      const transcriptText = msgs
+        .map(
+          (message) => `${message.speaker} (${message.time}): ${message.text}`
+        )
+        .join("\n");
+      const contextFiles =
+        recordings.length > 0
+          ? recordings.map((recording) => recording.url)
+          : [];
+      const suggestions = actionItems;
+      const embeddings = null;
+      const payload = {
+        user_id: user.id, // Use Redux user ID
+        meeting_id: meetingId,
+        transcript: transcriptText,
+        context_files: contextFiles,
+        embeddings: embeddings,
+        generated_prompt: suggestions.join(", "),
+        chunks: "lkajdsflksajfd",
+        suggestion_count: suggestions.length,
+      };
 
-    const result = await response.json();
-    console.log("Transcript saved successfully:", result);
-    toast({
-      title: "Transcript saved",
-      description: "Your meeting transcript has been saved successfully",
-    });
-    return result;
-  } catch (error) {
-    console.error("Error saving transcript:", error);
-    toast({
-      title: "Error saving transcript",
-      description: "Please try again later",
-      variant: "destructive",
-    });
-    throw error;
-  } finally {
-    setIsSaving(false);
-  }
-};
+      console.log("Saving transcript with user ID:", user.id);
+      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/generate_actions`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({transcript:payload}),
+      });
+
+      if (!response.ok) {
+        throw new Error("Failed to save transcript");
+      }
+
+      const result = await response.json();
+      console.log("Transcript saved successfully:", result);
+      toast({
+        title: "Transcript saved",
+        description: "Your meeting transcript has been saved successfully",
+      });
+      return result;
+    } catch (error) {
+      console.error("Error saving transcript:", error);
+      toast({
+        title: "Error saving transcript",
+        description: "Please try again later",
+        variant: "destructive",
+      });
+      throw error;
+    } finally {
+      setIsSaving(false);
+    }
+  };
 
   // Manual transcript save handler
   const handleSaveTranscript = async () => {
@@ -299,28 +398,51 @@ const saveTranscript = async (meetingId: string) => {
     try {
       const response = await fetch("/api/slack/channels", {
         method: "GET",
-        headers: { "Content-Type": "application/json" },
       });
+      
+      if (response.status === 401) {
+        setIsSlackAuthOpen(true);
+        return;
+      }
+      
       if (!response.ok) {
         throw new Error("Failed to get Slack channels");
       }
+      
       const data = await response.json();
+      console.log("Channels data:", data);
+      
+      if (!data.channels || data.channels.length === 0) {
+        toast({
+          title: "No Channels Found",
+          description: "No Slack channels were found in your workspace",
+          variant: "destructive",
+        });
+        return;
+      }
+      
       const channelList: Channel[] = data.channels.map((channel: any) => ({
         id: channel.id,
         name: channel.name,
       }));
+      
       setChannels(channelList);
+      setIsSlackOpen(true);
     } catch (error) {
       console.error("Error:", error);
-      console.log("Failed to get Slack channels. Please try again.");
+      toast({
+        title: "Slack Connection Error",
+        description: "Please reconnect your Slack account",
+        variant: "destructive",
+      });
+      setIsSlackAuthOpen(true);
     }
-    setIsSlackOpen(!isSlackOpen);
   };
 
   // Post transcript and summary to Slack
   const postToSlack = async (selectedChannels: any) => {
     try {
-      const transcriptText = messages
+      const transcriptText = msgs
         .map(
           (message) => `${message.speaker} (${message.time}): ${message.text}`
         )
@@ -359,9 +481,35 @@ const saveTranscript = async (meetingId: string) => {
     }
   };
 
+  const handleCompletionSubmit = async (
+    e: React.FormEvent<HTMLFormElement>
+  ) => {
+    e.preventDefault();
+    if (!input.trim()) return;
+
+    // Get transcript context from msgs
+    const transcriptContext = msgs
+      .map(
+        (message) => `${message.speaker} (${message.time}): ${message.text}`
+      )
+      .join("\n");
+    
+    // Create enhanced prompt with transcript context
+    const enhancedPrompt = `
+Context of the meeting transcript:
+${transcriptContext}
+
+Question: ${input}
+`;
+
+    await complete(enhancedPrompt);
+    handleInputChange({
+      target: { value: "" },
+    } as React.ChangeEvent<HTMLInputElement>);
+  };
   return (
     <div className="flex min-h-screen bg-white">
-      <Sidebar />
+      <Sidebar user={{ name: userName || "User", email: userEmail || "demo@gmail.com" }} />
       <div className="flex-1 flex flex-col h-screen overflow-hidden">
         {/* Header */}
         <header className="py-4 flex items-center justify-between border-b px-4">
@@ -499,6 +647,44 @@ const saveTranscript = async (meetingId: string) => {
 
                   <TabsContent value="transcript" className="mt-6">
                     <div className="space-y-6">
+                      {isLoadingTranscripts ? (
+                        <div className="flex items-center justify-center p-8">
+                          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+                        </div>
+                      ) : meetings.length > 0 ? (
+                        <div className="mb-4">
+                          <label htmlFor="meeting-select" className="block text-sm font-medium text-gray-700 mb-1">
+                            Select Meeting
+                          </label>
+                          <select
+                            id="meeting-select"
+                            value={selectedMeeting || ''}
+                            onChange={(e) => {
+                              const meetingId = e.target.value;
+                              setSelectedMeeting(meetingId);
+                              const meeting = meetings.find(m => m.meeting_id === meetingId);
+                              if (meeting && meeting.messages) {
+                                setMessages(meeting.messages);
+                              } else {
+                                setMessages([]);
+                              }
+                            }}
+                            className="block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                          >
+                            <option value="" disabled>Select a meeting</option>
+                            {meetings.map((meeting) => (
+                              <option key={meeting.meeting_id} value={meeting.meeting_id}>
+                                {meeting.meeting_id} - {new Date(meeting.created_at).toLocaleString()}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <div className="text-center p-4 text-gray-500">
+                          No meeting transcripts found.
+                        </div>
+                      )}
+
                       <div className="text-lg font-semibold mb-4">Speakers</div>
                       <div className="space-y-2">
                         <div className="text-sm text-muted-foreground">
@@ -507,7 +693,7 @@ const saveTranscript = async (meetingId: string) => {
                       </div>
 
                       <div className="space-y-6 mb-20">
-                        {messages.map((message) => (
+                        {msgs.map((message) => (
                           <div key={message.id} className="flex gap-4">
                             <Avatar>
                               <AvatarFallback className="bg-primary text-primary-foreground">
@@ -592,38 +778,95 @@ const saveTranscript = async (meetingId: string) => {
                 value="ai-chat"
                 className="flex-1 overflow-y-auto relative px-4"
               >
-                <div className="space-y-4 pb-20">
-                  <div className="flex flex-col justify-center items-center gap-4">
-                    <h2 className="text-xl font-semibold text-center mt-10">
-                      Ask AI questions or
-                    </h2>
+                <div className="space-y-4 pb-32 pt-4">
+                  <div className="flex flex-col gap-4">
                     <h2 className="text-xl font-semibold text-center">
-                      chat with your teammates
+                      Ask AI questions about your meeting
                     </h2>
-                    {suggestions.map((suggestion, index) => (
-                      <div
-                        key={index}
-                        className="p-4 rounded-lg border w-80 hover:cursor-pointer hover:bg-gray-100"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="text-purple-600">✨</span>
-                          <span>{suggestion}</span>
-                        </div>
+
+                    {messages.length === 0 && !completion && (
+                      <div className="flex flex-col gap-3 mt-4">
+                        <h3 className="text-sm font-medium text-gray-500">
+                          Suggestions
+                        </h3>
+                        {suggestions.map((suggestion, index) => (
+                          <button
+                            key={index}
+                            onClick={() => handleSuggestionClick(suggestion)}
+                            className="p-4 rounded-lg bg-gray-50 border border-gray-200 hover:bg-gray-100 transition-colors text-left"
+                          >
+                            <div className="flex items-start gap-2">
+                              <span className="text-purple-600 mt-1">💡</span>
+                              <span className="whitespace-pre-wrap">
+                                {suggestion}
+                              </span>
+                            </div>
+                          </button>
+                        ))}
                       </div>
-                    ))}
+                    )}
+
+                    <div className="flex-1 overflow-y-auto pb-24">
+                      {messages.map((message, index) => (
+                        <div
+                          key={index}
+                          className={`p-4 rounded-lg ${
+                            message.role === "user"
+                              ? "bg-gray-100 ml-auto"
+                              : "bg-purple-50 border border-purple-100"
+                          } max-w-[80%] ${
+                            message.role === "user" ? "self-end" : "self-start"
+                          }`}
+                        >
+                          <div className="flex items-start gap-2">
+                            {message.role !== "user" && (
+                              <span className="text-purple-600 mt-1">✨</span>
+                            )}
+                            <span className="whitespace-pre-wrap">
+                              {message.content}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+
+                      {completion && (
+                        <div className="p-4 rounded-lg bg-purple-50 border border-purple-100 max-w-[80%] self-start">
+                          <div className="flex items-start gap-2">
+                            <span className="text-purple-600 mt-1">✨</span>
+                            <span className="whitespace-pre-wrap">
+                              {completion}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className="absolute bottom-0 left-0 right-0 p-4 bg-white border-t">
-                  <div className="relative">
-                    <input
-                      type="text"
-                      placeholder="Ask Otter anything about your conversations..."
-                      className="w-full px-4 py-2 pr-10 border rounded-full focus:outline-none focus:ring-2 focus:ring-purple-600"
-                    />
-                    <span className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-600">
-                      ✨
-                    </span>
-                  </div>
+                <div className="sticky bottom-0 left-0 right-0 p-4 bg-white border-t shadow-md">
+                  <form
+                    onSubmit={handleCompletionSubmit}
+                    className="flex items-center gap-2"
+                  >
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        placeholder="Ask Otter anything about your conversations..."
+                        className="w-full px-4 py-3 pr-10 border rounded-full focus:outline-none focus:ring-2 focus:ring-purple-600"
+                        value={input}
+                        onChange={handleInputChange}
+                      />
+                      <span className="absolute right-3 top-1/2 -translate-y-1/2 text-purple-600">
+                        ✨
+                      </span>
+                    </div>
+                    <button
+                      type="submit"
+                      className="bg-purple-600 text-white px-4 py-2 rounded-full hover:bg-purple-700 transition-colors disabled:opacity-50"
+                      disabled={isCompletionLoading || !input.trim()}
+                    >
+                      {isCompletionLoading ? "..." : "Ask"}
+                    </button>
+                  </form>
                 </div>
               </TabsContent>
 
@@ -650,6 +893,11 @@ const saveTranscript = async (meetingId: string) => {
           </aside>
         </main>
       </div>
+
+      <SlackAuthDialog
+        isOpen={isSlackAuthOpen}
+        onOpenChange={setIsSlackAuthOpen}
+      />
 
       <SlackDialog
         postToSlack={postToSlack}

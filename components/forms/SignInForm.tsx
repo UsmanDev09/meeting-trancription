@@ -12,11 +12,12 @@ import { Formik, Form, Field, ErrorMessage, FormikHelpers } from 'formik';
 import * as Yup from 'yup';
 import { useRouter } from 'next/navigation';
 import { toast } from 'react-toastify';
-import { signIn } from 'next-auth/react';
 import LinkedInSvg from '../svgs/linkedInSvg';
 import GoogleSvg from '../svgs/googleSvg';
 import FacebookSvg from '../svgs/facebookSvg';
-import supabase from '@/lib/supabase';
+import { useDispatch } from 'react-redux';
+import { setUser } from '@/redux/slices/authSlice';
+import { loginUser } from '@/app/actions/auth';
 
 export default function SignInPage() {
   const router = useRouter();
@@ -37,7 +38,7 @@ export default function SignInPage() {
       .required('Email is required'),
     password: Yup.string().required('Password is required'),
   });
-
+  const dispatch = useDispatch();
   const handleSubmit = async (
     values: SignInFormValues,
     { setSubmitting }: FormikHelpers<SignInFormValues>
@@ -45,44 +46,22 @@ export default function SignInPage() {
     try {
       const { email, password } = values;
       console.log("Starting authentication attempt...");
-  
-      // First verify Supabase client is initialized
-      if (!supabase.auth) {
-        console.error("Supabase auth is not initialized");
-        toast("Authentication service not available", { type: 'error' });
-        return;
-      }
-  
-      // Log the auth request
-      console.log("Sending auth request to Supabase...");
       
-      const { data, error } = await supabase.auth.signInWithPassword({
-        email: email.trim(), // Remove any potential whitespace
-        password,
-      });
-  
-      console.log("Auth response received:", {
-        hasData: !!data,
-        hasError: !!error,
-        errorMessage: error?.message,
-        user: data?.user ? 'exists' : 'null',
-        session: data?.session ? 'exists' : 'null'
-      });
-  
-      if (error) {
-        console.error('Detailed error:', {
-          message: error.message,
-          status: error.status,
-          name: error.name
-        });
-        toast(error.message || 'Invalid login credentials', { type: 'error' });
-      } else if (data.session) {
+      const result = await loginUser(email, password);
+      
+      if (!result.success) {
+        console.error('Login error:', result.error);
+        toast(result.error || 'Invalid login credentials', { type: 'error' });
+      } else if(result && result.user) {
+        dispatch(setUser({
+          id: result.user.id,
+          email: result.user.email,
+          name: result.user.name
+        }));
+
         console.log('Sign in successful, session established');
         toast('Login successful!', { type: 'success' });
         router.push('/');
-      } else {
-        console.log('No error but no session created');
-        toast('Unable to establish session', { type: 'error' });
       }
     } catch (error) {
       console.error('Exception caught:', error);

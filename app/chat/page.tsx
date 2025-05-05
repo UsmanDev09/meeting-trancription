@@ -1,7 +1,6 @@
 import ChatPage from '@/components/chatPage'
 import React from 'react'
-
-export default function Chat() {
+export default async function Chat() {
   return (
     <>
     <ChatPage/>

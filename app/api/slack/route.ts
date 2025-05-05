@@ -1,71 +1,89 @@
+import createClient from '@/lib/supabase';
+import { NextResponse } from 'next/server';
+
 export async function POST(request: Request) {
+  const supabase = await createClient();
   try {
-    const SLACK_TOKEN = process.env.SLACK_TOKEN;
-    if (!SLACK_TOKEN) {
-      return new Response(
-        JSON.stringify({ error: "Missing Slack configuration" }),
-        { status: 500, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
     const { transcript, summary, selectedChannels } = await request.json();
+    if (!transcript || !summary || !selectedChannels || !selectedChannels.length) {
+      return NextResponse.json({ error: 'Missing required data' }, { status: 400 });
+    }
+    const { data: { user } } = await supabase.auth.getUser();
+    
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+    const { data: slackTokenData, error: tokenError } = await supabase
+      .from('user_slack_tokens')
+      .select('slack_token')
+      .eq('user_id', user.id)
+      .single();
 
-    if (!Array.isArray(selectedChannels) || selectedChannels.length === 0) {
-      return new Response(
-        JSON.stringify({ error: "No valid channels provided" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
+    if (tokenError || !slackTokenData?.slack_token) {
+      return NextResponse.json({ error: 'Slack not connected' }, { status: 401 });
     }
 
-    if (!transcript && !summary) {
-      return new Response(
-        JSON.stringify({ error: "No transcript or summary provided" }),
-        { status: 400, headers: { "Content-Type": "application/json" } }
-      );
-    }
-
-    let textMessage = "";
-    if (transcript && summary) {
-      textMessage = `*Meeting Summary:*\n${summary}\n\n*Transcript:*\n${transcript}`;
-    } else if (summary) {
-      textMessage = `*Meeting Summary:*\n${summary}`;
-    } else if (transcript) {
-      textMessage = `*Transcript:*\n${transcript}`;
-    }
-
-    const postResults = [];
-
+    const slackToken = slackTokenData.slack_token;
+    const message = {
+      blocks: [
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*Meeting Summary*"
+          }
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: summary
+          }
+        },
+        {
+          type: "divider"
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: "*Transcript*"
+          }
+        },
+        {
+          type: "section",
+          text: {
+            type: "mrkdwn",
+            text: transcript.length > 3000 ? transcript.substring(0, 3000) + "..." : transcript
+          }
+        }
+      ]
+    };
+    const results = [];
     for (const channelId of selectedChannels) {
-      const slackResponse = await fetch("https://slack.com/api/chat.postMessage", {
-        method: "POST",
+      const response = await fetch('https://slack.com/api/chat.postMessage', {
+        method: 'POST',
         headers: {
-          Authorization: `Bearer ${SLACK_TOKEN}`,
-          "Content-Type": "application/json",
+          'Authorization': `Bearer ${slackToken}`,
+          'Content-Type': 'application/json'
         },
         body: JSON.stringify({
           channel: channelId,
-          text: textMessage,
-        }),
+          ...message
+        })
       });
 
-      const data = await slackResponse.json();
-
-      if (!data.ok) {
-        console.error(`Failed to post to channel ${channelId}:`, data.error);
-        postResults.push({ channel: channelId, success: false, error: data.error });
-      } else {
-        postResults.push({ channel: channelId, success: true });
+      const result = await response.json();
+      results.push({ channelId, success: result.ok, error: result.error });
+      
+      if (!result.ok) {
+        console.error(`Error posting to channel ${channelId}:`, result.error);
       }
     }
 
-    return new Response(JSON.stringify({ results: postResults }), {
-      headers: { "Content-Type": "application/json" },
-    });
-  } catch (error) {
-    console.error("Error posting to Slack:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to post to Slack" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    return NextResponse.json({ results });
+  } catch (error: any) {
+    console.error('Error posting to Slack:', error);
+    return NextResponse.json({ error: 'Failed to post to Slack' }, { status: 500 });
   }
 }

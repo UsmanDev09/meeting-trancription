@@ -1,12 +1,9 @@
-import { GettingStarted } from "@/components/getting-started";
 import { Calendar } from "lucide-react"
 import Link from "next/link";
 
 export function HomeTab() {
   return (
     <div className="max-w-4xl mx-auto">
-      <GettingStarted />
-
       <div className="mt-6 w-[90%]">
         <h3 className="text-lg text-gray-600">Yesterday, Jan 2</h3>
         <div className="mt-4 bg-white rounded-lg border p-4">
