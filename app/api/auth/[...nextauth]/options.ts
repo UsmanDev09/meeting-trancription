@@ -5,6 +5,7 @@ export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
   session: {
     strategy: 'jwt',
+    maxAge: 30 * 24 * 60 * 60, // 30 days
   },
   providers: [
     GoogleProvider({
@@ -37,5 +38,9 @@ export const authOptions: NextAuthOptions = {
       session.expiresAt = token.expiresAt as number;
       return session;
     },
+  },
+  pages: {
+    signIn: '/sign-in',
+    error: '/sign-in',
   },
 };

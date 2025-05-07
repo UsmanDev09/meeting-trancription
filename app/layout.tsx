@@ -23,7 +23,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body className={rubik.className}>
+      <body className={rubik.className} suppressHydrationWarning>
         <ThemeProvider attribute="class" defaultTheme="light">
           <ReduxProvider>
             <Provider>{children}</Provider>
